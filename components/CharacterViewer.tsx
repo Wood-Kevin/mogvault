@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback, FormEvent } from "react";
 import type { CharacterRouteResponse } from "@/app/api/character/[realm]/[name]/route";
 import type { ItemDisplayResponse } from "@/app/api/item/[id]/display/route";
-import { SLOT_DEFS } from "@/lib/slots";
+import { SLOT_DEFS, toRenderSlot } from "@/lib/slots";
 import ItemBrowser from "./ItemBrowser";
 import RealmCombobox from "./RealmCombobox";
 
@@ -169,7 +169,15 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       const stageH = stageRef.current?.clientHeight ?? 620;
       const aspect = stageW / stageH;
 
-      const model = await generateModelsRef.current(aspect, `#${CONTAINER_ID}`, charData.character);
+      // Remap weapon logical slots (16/17) to viewer render slots (21/22) before
+      // passing to generateModels. Outfit state and localStorage stay on logical slots.
+      const viewerCharacter = {
+        ...charData.character,
+        items: charData.character.items.map(
+          ([slot, displayId]) => [toRenderSlot(slot), displayId] as [number, number]
+        ),
+      };
+      const model = await generateModelsRef.current(aspect, `#${CONTAINER_ID}`, viewerCharacter);
       modelRef.current = model;
       onModelReady?.(model);
 
@@ -184,10 +192,11 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       const key   = `${realmSlug}/${nameSlug}`;
       const saved = loadSavedOutfit(key);
       for (const [slotStr, entry] of Object.entries(saved)) {
+        const renderSlot = toRenderSlot(Number(slotStr));
         if (entry.kind === "item") {
-          model.updateItemViewer(Number(slotStr), entry.displayId);
+          model.updateItemViewer(renderSlot, entry.displayId);
         } else if (entry.kind === "hidden") {
-          model.updateItemViewer(Number(slotStr), 0);
+          model.updateItemViewer(renderSlot, 0);
         }
       }
 
@@ -206,7 +215,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
   // ── Apply item override ────────────────────────────────────────────────────
   const applyItem = useCallback((slot: number, data: ItemDisplayResponse) => {
     if (!modelRef.current || !charKey) return;
-    modelRef.current.updateItemViewer(slot, data.displayId);
+    modelRef.current.updateItemViewer(toRenderSlot(slot), data.displayId);
     const entry: OutfitEntry = {
       kind:      "item",
       itemId:    data.itemId,
@@ -226,7 +235,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
   // the viewer's attempt to load display 0 fails gracefully and leaves the slot empty.
   const hideSlot = useCallback((slot: number) => {
     if (!modelRef.current || !charKey) return;
-    modelRef.current.updateItemViewer(slot, 0);
+    modelRef.current.updateItemViewer(toRenderSlot(slot), 0);
     const entry: OutfitEntry = { kind: "hidden" };
     setOutfit(prev => {
       const next = { ...prev, [slot]: entry };
@@ -239,7 +248,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
   const revertSlot = useCallback((slot: number) => {
     if (!modelRef.current || !charKey) return;
     const baseDisplayId = baseItemsRef.current[slot] ?? 0;
-    modelRef.current.updateItemViewer(slot, baseDisplayId);
+    modelRef.current.updateItemViewer(toRenderSlot(slot), baseDisplayId);
     setOutfit(prev => {
       const next = { ...prev };
       delete next[slot];
@@ -382,6 +391,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
           onHide={hideSlot}
           onRevert={revertSlot}
           outfit={outfit}
+          className={meta?.className ?? undefined}
         />
       )}
     </div>

@@ -3,7 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFileSync } from "fs";
 import { join } from "path";
 import { getGameData } from "@/lib/blizzard";
-import { SLOT_TO_INVENTORY_TYPES, INVENTORY_TYPE_TO_VIEWER_SLOT } from "@/lib/slots";
+import {
+  SLOT_TO_INVENTORY_TYPES,
+  INVENTORY_TYPE_TO_VIEWER_SLOT,
+  ARMOR_FILTERABLE_SLOTS,
+  CLASS_TO_ARMOR_SUBCLASS,
+} from "@/lib/slots";
 
 // ── Source index ──────────────────────────────────────────────────────────────
 
@@ -82,10 +87,11 @@ const PAGE_SIZE = 24;
 
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
-  const slot    = parseInt(searchParams.get("slot") ?? "", 10);
-  const q       = searchParams.get("q")?.trim() ?? "";
-  const page    = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
+  const slot      = parseInt(searchParams.get("slot") ?? "", 10);
+  const q         = searchParams.get("q")?.trim() ?? "";
+  const page      = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
   const typeParam = searchParams.get("type") ?? "";
+  const className = searchParams.get("className")?.trim() ?? "";
 
   if (isNaN(slot)) {
     return NextResponse.json({ error: "slot is required" }, { status: 400 });
@@ -105,6 +111,17 @@ export async function GET(req: NextRequest) {
     "_page":     String(page),
   };
   if (q) apiParams["name.en_US"] = q;
+
+  // Armor class filter: only for armor slots when a class is known.
+  // Cosmetic items (subclass 5) bypass class restrictions but are a minor
+  // known gap — a second API call to merge cosmetics isn't worth the cost.
+  if (className && ARMOR_FILTERABLE_SLOTS.has(slot)) {
+    const armorSubclass = CLASS_TO_ARMOR_SUBCLASS[className];
+    if (armorSubclass !== undefined) {
+      apiParams["item_class.id"]    = "4"; // Armor
+      apiParams["item_subclass.id"] = String(armorSubclass);
+    }
+  }
 
   const searchRes = await getGameData("/data/wow/search/item", { searchParams: apiParams });
   if (!searchRes.ok) {

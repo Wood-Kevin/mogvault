@@ -8,16 +8,18 @@ import {
   SLOT_TO_INVENTORY_TYPES,
   INVENTORY_TYPE_LABELS,
   HIDEABLE_SLOTS,
+  CLASS_WEAPON_SLOT_TYPES,
 } from "@/lib/slots";
 import type { OutfitEntry } from "./CharacterViewer";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface ItemBrowserProps {
-  onApply:  (slot: number, data: ItemDisplayResponse) => void;
-  onHide:   (slot: number) => void;
-  onRevert: (slot: number) => void;
-  outfit:   Record<number, OutfitEntry>;
+  onApply:   (slot: number, data: ItemDisplayResponse) => void;
+  onHide:    (slot: number) => void;
+  onRevert:  (slot: number) => void;
+  outfit:    Record<number, OutfitEntry>;
+  className?: string; // Blizzard class name e.g. "Demon Hunter"; undefined = no filter
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -117,7 +119,7 @@ function ItemCard({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ItemBrowser({ onApply, onHide, onRevert, outfit }: ItemBrowserProps) {
+export default function ItemBrowser({ onApply, onHide, onRevert, outfit, className }: ItemBrowserProps) {
   // Fetch parameters — changed as single unit to avoid double-fetch
   const [fetchParams, setFetchParams] = useState({
     slot: FIRST_VISIBLE_SLOT,
@@ -140,6 +142,14 @@ export default function ItemBrowser({ onApply, onHide, onRevert, outfit }: ItemB
   const [applyingId, setApplyingId] = useState<number | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
 
+  // Effective types for the current slot — computed early so effects can use it.
+  // For weapon slots, CLASS_WEAPON_SLOT_TYPES overrides the base list per class.
+  // Armor slots are filtered server-side; the type list is unchanged client-side.
+  const _classWeaponOverride = className
+    ? CLASS_WEAPON_SLOT_TYPES[className]?.[fetchParams.slot]
+    : undefined;
+  const _effectiveTypes = _classWeaponOverride ?? (SLOT_TO_INVENTORY_TYPES[fetchParams.slot] ?? []);
+
   // ── Debounce query ───────────────────────────────────────────────────────
   function handleQueryChange(q: string) {
     setQueryInput(q);
@@ -150,9 +160,22 @@ export default function ItemBrowser({ onApply, onHide, onRevert, outfit }: ItemB
     }, 350);
   }
 
+  // When the effective type list changes (e.g., class loaded, slot changed),
+  // auto-correct fetchParams.type if the current type is no longer in the list.
+  useEffect(() => {
+    if (_effectiveTypes.length > 0 && !_effectiveTypes.includes(fetchParams.type)) {
+      setFetchParams(p => ({ ...p, type: _effectiveTypes[0], page: 1 }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [_effectiveTypes.join(",")]);
+
   // ── Slot / type handlers ─────────────────────────────────────────────────
   function handleSlotChange(newSlot: number) {
-    const types = SLOT_TO_INVENTORY_TYPES[newSlot] ?? [];
+    // Use class-filtered types if available; fall back to base types.
+    const classOverride = className
+      ? CLASS_WEAPON_SLOT_TYPES[className]?.[newSlot]
+      : undefined;
+    const types = classOverride ?? SLOT_TO_INVENTORY_TYPES[newSlot] ?? [];
     setFetchParams({ slot: newSlot, type: types[0] ?? "", page: 1 });
     setApplyError(null);
   }
@@ -168,6 +191,14 @@ export default function ItemBrowser({ onApply, onHide, onRevert, outfit }: ItemB
 
   // ── Fetch items ──────────────────────────────────────────────────────────
   useEffect(() => {
+    // If class filter leaves no valid types for this slot, skip the fetch.
+    if (validTypes.length === 0) {
+      setItems([]);
+      setPageCount(0);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -178,6 +209,7 @@ export default function ItemBrowser({ onApply, onHide, onRevert, outfit }: ItemB
       page: String(fetchParams.page),
     });
     if (fetchQuery) params.set("q", fetchQuery);
+    if (className)  params.set("className", className);
 
     fetch(`/api/search/items?${params}`)
       .then(res => {
@@ -232,7 +264,8 @@ export default function ItemBrowser({ onApply, onHide, onRevert, outfit }: ItemB
   }
 
   // ── Derived ──────────────────────────────────────────────────────────────
-  const validTypes   = SLOT_TO_INVENTORY_TYPES[fetchParams.slot] ?? [];
+  const validTypes = _effectiveTypes; // alias for readability in JSX below
+
   const isMultiType  = validTypes.length > 1;
   const isHideable   = HIDEABLE_SLOTS.has(fetchParams.slot);
   const currentEntry = outfit[fetchParams.slot];
@@ -338,7 +371,11 @@ export default function ItemBrowser({ onApply, onHide, onRevert, outfit }: ItemB
       )}
 
       {/* Item grid */}
-      {loading ? (
+      {validTypes.length === 0 ? (
+        <p className="py-8 text-center text-sm text-muted">
+          {className ? `${className}s cannot equip items in this slot.` : "No items for this slot."}
+        </p>
+      ) : loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
           {Array.from({ length: 6 }).map((_, i) => (
             <div
