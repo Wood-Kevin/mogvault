@@ -50,9 +50,11 @@ export async function GET(
       "Content-Type": contentType,
       // Allow browsers to cache CDN assets aggressively — they don't change
       // between requests and we want to avoid redundant proxy calls.
-      // Model viewer assets are versioned by Wowhead's CDN paths; treat as immutable.
-      // One-year TTL prevents repeated proxy invocations for the same binary assets.
-      "Cache-Control": "public, max-age=31536000, immutable",
+      // Vercel's edge respects s-maxage; without it the infra forces max-age=0.
+      // CDN-Cache-Control is the Vercel-native override for edge caching.
+      // max-age covers browsers that see the response directly.
+      "Cache-Control":     "public, s-maxage=31536000, max-age=31536000, immutable",
+      "CDN-Cache-Control": "public, max-age=31536000, immutable",
     },
   });
 }
