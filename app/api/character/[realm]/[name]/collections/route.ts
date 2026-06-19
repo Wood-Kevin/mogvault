@@ -1,6 +1,7 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import { getGameData } from "@/lib/blizzard";
+import { isRegion } from "@/lib/regions";
 
 export interface CollectionsResponse {
   ownedAppearanceIds: number[];
@@ -14,14 +15,17 @@ interface TransmogSlot {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ realm: string; name: string }> }
 ) {
   const { realm, name } = await params;
 
+  const regionParam = (req.nextUrl.searchParams.get("region") ?? "us").toLowerCase();
+  const region = isRegion(regionParam) ? regionParam : "us";
+
   const res = await getGameData(
     `/profile/wow/character/${encodeURIComponent(realm)}/${encodeURIComponent(name)}/collections/transmogs`,
-    { namespace: "profile" }
+    { namespace: "profile", region }
   );
 
   // 403 = private profile; 404 = not found — degrade gracefully in both cases.

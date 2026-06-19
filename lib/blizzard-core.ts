@@ -2,11 +2,11 @@
 // Import this directly from scripts. Route handlers should import lib/blizzard.ts
 // instead (which adds the server-only guard on top of this).
 
-const REGION = process.env.BLIZZARD_REGION ?? "us";
+import { type Region, regionHost, regionLocale, namespace as buildNamespace } from "./regions";
+
 const CLIENT_ID = process.env.BLIZZARD_CLIENT_ID;
 const CLIENT_SECRET = process.env.BLIZZARD_CLIENT_SECRET;
 
-const API_BASE = `https://${REGION}.api.blizzard.com`;
 const TOKEN_URL = "https://oauth.battle.net/token";
 
 // ── Token cache ───────────────────────────────────────────────────────────────
@@ -71,25 +71,27 @@ export type BlizzardNamespace = "static" | "profile" | "dynamic";
 interface GameDataOptions {
   namespace?: BlizzardNamespace;
   searchParams?: Record<string, string>;
+  region?: Region;
 }
 
 export async function getGameData(
   path: string,
-  { namespace = "static", searchParams }: GameDataOptions = {}
+  { namespace = "static", searchParams, region = "us" }: GameDataOptions = {}
 ): Promise<Response> {
   const token = await getAccessToken();
-  return doRequest(path, token, namespace, searchParams);
+  return doRequest(path, token, namespace, region, searchParams);
 }
 
 async function doRequest(
   path: string,
   token: string,
-  namespace: BlizzardNamespace,
+  nsKind: BlizzardNamespace,
+  region: Region,
   searchParams?: Record<string, string>,
   retried = false,
 ): Promise<Response> {
-  const url = new URL(`${API_BASE}${path}`);
-  url.searchParams.set("locale", "en_US");
+  const url = new URL(`${regionHost(region)}${path}`);
+  url.searchParams.set("locale", regionLocale(region));
   if (searchParams) {
     for (const [k, v] of Object.entries(searchParams)) {
       url.searchParams.set(k, v);
@@ -99,7 +101,7 @@ async function doRequest(
   const res = await fetch(url.toString(), {
     headers: {
       Authorization: `Bearer ${token}`,
-      "Battlenet-Namespace": `${namespace}-${REGION}`,
+      "Battlenet-Namespace": buildNamespace(nsKind, region),
     },
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),
@@ -108,7 +110,7 @@ async function doRequest(
   if (res.status === 401 && !retried) {
     tokenCache = null;
     const freshToken = await getAccessToken();
-    return doRequest(path, freshToken, namespace, searchParams, true);
+    return doRequest(path, freshToken, nsKind, region, searchParams, true);
   }
 
   return res;

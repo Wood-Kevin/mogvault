@@ -5,6 +5,7 @@ import type { CharacterRouteResponse } from "@/app/api/character/[realm]/[name]/
 import type { ItemDisplayResponse } from "@/app/api/item/[id]/display/route";
 import type { CollectionsResponse } from "@/app/api/character/[realm]/[name]/collections/route";
 import { SLOT_DEFS, toRenderSlot } from "@/lib/slots";
+import { REGIONS, type Region } from "@/lib/regions";
 import ItemBrowser from "./ItemBrowser";
 import FarmingList from "./FarmingList";
 import RealmCombobox from "./RealmCombobox";
@@ -150,6 +151,7 @@ const FarmIcon = () => (
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CharacterViewer({ onModelReady }: CharacterViewerProps) {
+  const [region,    setRegion]    = useState<Region>("us");
   const [realmSlug, setRealmSlug] = useState("zuljin");
   const [charName,  setCharName]  = useState("demonkaz");
   const [phase,     setPhase]     = useState<Phase>("loading-deps");
@@ -210,7 +212,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
     let charData: CharacterRouteResponse;
     try {
       const res = await fetch(
-        `/api/character/${encodeURIComponent(realmSlug)}/${encodeURIComponent(nameSlug)}`
+        `/api/character/${encodeURIComponent(realmSlug)}/${encodeURIComponent(nameSlug)}?region=${region}`
       );
       const json = await res.json();
       if (!res.ok) {
@@ -251,7 +253,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       }
       baseItemsRef.current = newBaseItems;
 
-      const key   = `${realmSlug}/${nameSlug}`;
+      const key   = `${region}/${realmSlug}/${nameSlug}`;
       const saved = loadSavedOutfit(key);
       for (const [slotStr, entry] of Object.entries(saved)) {
         const renderSlot = toRenderSlot(Number(slotStr));
@@ -268,7 +270,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       setPhase("loaded");
 
       fetch(
-        `/api/character/${encodeURIComponent(realmSlug)}/${encodeURIComponent(nameSlug)}/collections`
+        `/api/character/${encodeURIComponent(realmSlug)}/${encodeURIComponent(nameSlug)}/collections?region=${region}`
       )
         .then(r => r.ok ? r.json() as Promise<CollectionsResponse> : null)
         .then(data => {
@@ -336,6 +338,22 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
 
       {/* Character input form */}
       <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 print:hidden">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="mv-region" className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+            Region
+          </label>
+          <select
+            id="mv-region"
+            value={region}
+            onChange={e => setRegion(e.target.value as Region)}
+            disabled={isBusy}
+            className="rounded-lg border border-edge bg-void px-3 py-2 text-sm text-lavender focus:border-accent focus:outline-none disabled:opacity-50 transition-colors"
+          >
+            {REGIONS.map(r => (
+              <option key={r} value={r}>{r.toUpperCase()}</option>
+            ))}
+          </select>
+        </div>
         <div className="flex flex-col gap-1.5">
           <label htmlFor="mv-realm" className="text-[10px] font-semibold uppercase tracking-widest text-muted">
             Realm

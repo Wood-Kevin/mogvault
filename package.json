@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "build:index": "node --env-file=.env.local --import tsx scripts/build-source-index.ts"
+    "build:index": "node --env-file=.env.local --import tsx scripts/build-source-index.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@vercel/analytics": "^2.0.1",
@@ -26,6 +27,7 @@
     "eslint-config-next": "16.2.9",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.9"
   }
 }

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGameData } from "@/lib/blizzard";
+import { isRegion } from "@/lib/regions";
 
 // ── Viewer slot constants (from wow-model-viewer character_modeling.js) ───────
 // internal_slot_id (from Blizzard appearance API) + 1 = viewer slot number.
@@ -109,17 +110,27 @@ export interface CharacterRouteResponse {
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ realm: string; name: string }> }
 ) {
   const { realm, name } = await params;
+
+  // ── 0. Validate region query param ────────────────────────────────────────
+  const regionParam = (req.nextUrl.searchParams.get("region") ?? "us").toLowerCase();
+  if (!isRegion(regionParam)) {
+    return NextResponse.json(
+      { error: "invalid_region", message: `"${regionParam}" is not a supported region. Use us, eu, kr, or tw.` },
+      { status: 400 }
+    );
+  }
+  const region = regionParam;
 
   // ── 1. Fetch appearance endpoint (transmog-aware item IDs + customizations)
   let appRes: Response;
   try {
     appRes = await getGameData(
       `/profile/wow/character/${encodeURIComponent(realm)}/${encodeURIComponent(name)}/appearance`,
-      { namespace: "profile" }
+      { namespace: "profile", region }
     );
   } catch {
     return NextResponse.json(
