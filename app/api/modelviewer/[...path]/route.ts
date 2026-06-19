@@ -50,7 +50,9 @@ export async function GET(
       "Content-Type": contentType,
       // Allow browsers to cache CDN assets aggressively — they don't change
       // between requests and we want to avoid redundant proxy calls.
-      "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+      // Model viewer assets are versioned by Wowhead's CDN paths; treat as immutable.
+      // One-year TTL prevents repeated proxy invocations for the same binary assets.
+      "Cache-Control": "public, max-age=31536000, immutable",
     },
   });
 }
