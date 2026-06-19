@@ -378,8 +378,15 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
         className="relative overflow-hidden rounded-xl border border-edge print:hidden"
         style={{
           height: 620,
-          // Atmospheric upward glow — lit stage, dark surround
-          background: "radial-gradient(ellipse 75% 55% at 50% 100%, #1e0f35 0%, #0d0010 65%)",
+          // Two-layer stage lighting:
+          //   1. Main ambient — centered on the character's body (≈40% down), even falloff
+          //   2. Floor accent — small glow at the feet, echoes the platform div below
+          // Avoids the top-dark/bottom-bright seam the old bottom-anchored gradient caused.
+          background: [
+            "radial-gradient(ellipse 62% 62% at 50% 42%, #1e0f35 0%, transparent 78%)",
+            "radial-gradient(ellipse 32% 16% at 50% 95%, rgb(45 18 87 / 0.45) 0%, transparent 100%)",
+            "#0d0010",
+          ].join(", "),
         }}
       >
         <div id={CONTAINER_ID} className="h-full w-full" />
