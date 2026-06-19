@@ -6,7 +6,7 @@ export default function Home() {
       <div className="mx-auto max-w-5xl space-y-10">
 
         {/* Header */}
-        <div className="space-y-3">
+        <div className="space-y-3 print:hidden">
           <h1 className="text-5xl font-bold tracking-wide text-lavender">MogVault</h1>
           <p className="text-base text-muted">
             Load your character. Build a transmog set. Get the farming list.
@@ -15,7 +15,7 @@ export default function Home() {
 
         {/* Character viewer + item browser */}
         <section className="space-y-3">
-          <h2 className="text-xs uppercase tracking-widest text-muted">Character</h2>
+          <h2 className="text-xs uppercase tracking-widest text-muted print:hidden">Character</h2>
           <CharacterViewerClient />
         </section>
 

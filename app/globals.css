@@ -46,3 +46,15 @@ body {
   font-family: var(--font-sans, Arial, Helvetica, sans-serif);
   -webkit-font-smoothing: antialiased;
 }
+
+/* ── Print ──────────────────────────────────────────────────────── */
+@media print {
+  html, body {
+    background: white !important;
+    color: black !important;
+  }
+  /* Page-break safety for instance/encounter cards */
+  .print-card {
+    page-break-inside: avoid;
+  }
+}

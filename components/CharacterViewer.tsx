@@ -5,6 +5,7 @@ import type { CharacterRouteResponse } from "@/app/api/character/[realm]/[name]/
 import type { ItemDisplayResponse } from "@/app/api/item/[id]/display/route";
 import { SLOT_DEFS, toRenderSlot } from "@/lib/slots";
 import ItemBrowser from "./ItemBrowser";
+import FarmingList from "./FarmingList";
 import RealmCombobox from "./RealmCombobox";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -265,7 +266,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
     <div className="space-y-5">
 
       {/* Character input form */}
-      <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
+      <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 print:hidden">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="mv-realm" className="text-xs uppercase tracking-widest text-muted">
             Realm
@@ -308,7 +309,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       {/* Viewer stage */}
       <div
         ref={stageRef}
-        className="relative overflow-hidden rounded-xl border border-edge bg-void-alt"
+        className="relative overflow-hidden rounded-xl border border-edge bg-void-alt print:hidden"
         style={{ height: 620 }}
       >
         <div id={CONTAINER_ID} className="h-full w-full" />
@@ -351,7 +352,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
 
       {/* Outfit chips — one per active override or hidden slot */}
       {phase === "loaded" && Object.keys(outfit).length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 print:hidden">
           {Object.entries(outfit).map(([slotStr, entry]) => {
             const slot     = Number(slotStr);
             const slotDef  = SLOT_DEFS.find(s => s.viewerSlot === slot);
@@ -386,6 +387,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
 
       {/* Item browser — shown after character loads */}
       {phase === "loaded" && (
+        <div className="print:hidden">
         <ItemBrowser
           onApply={applyItem}
           onHide={hideSlot}
@@ -393,6 +395,18 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
           outfit={outfit}
           className={meta?.className ?? undefined}
         />
+        </div>
+      )}
+
+      {/* Farming list — shown after character loads */}
+      {phase === "loaded" && charKey && (
+        <div className="rounded-xl border border-edge bg-surface p-4 print:border-0 print:bg-transparent print:p-0">
+          <FarmingList
+            outfit={outfit}
+            charKey={charKey}
+            charName={meta?.name}
+          />
+        </div>
       )}
     </div>
   );
