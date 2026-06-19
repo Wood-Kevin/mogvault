@@ -1,28 +1,6 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync } from "fs";
-import { join } from "path";
-
-// ── Source index (same singleton pattern as search route) ─────────────────────
-
-type SourceEntry = {
-  instanceId: number;
-  instanceName: string;
-  encounterId: number;
-  encounterName: string;
-  type: "raid" | "dungeon";
-};
-type SourceIndex = Record<string, { sources: SourceEntry[] }>;
-
-let _sourceIndex: SourceIndex | null = null;
-function getSourceIndex(): SourceIndex {
-  if (!_sourceIndex) {
-    _sourceIndex = JSON.parse(
-      readFileSync(join(process.cwd(), "data", "source-index.json"), "utf-8")
-    ) as SourceIndex;
-  }
-  return _sourceIndex;
-}
+import { getSourceIndex } from "@/lib/sourceIndex";
 
 // ── Response types ────────────────────────────────────────────────────────────
 
@@ -58,6 +36,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       { instances: [], otherItemIds: [] } satisfies FarmingListResponse
     );
+  }
+
+  if (itemIds.length > 50) {
+    return NextResponse.json({ error: "Too many items (max 50)" }, { status: 400 });
   }
 
   const index = getSourceIndex();

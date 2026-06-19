@@ -37,6 +37,7 @@ async function fetchNewToken(): Promise<TokenCache> {
     },
     body: "grant_type=client_credentials",
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {
@@ -84,7 +85,8 @@ async function doRequest(
   path: string,
   token: string,
   namespace: BlizzardNamespace,
-  searchParams?: Record<string, string>
+  searchParams?: Record<string, string>,
+  retried = false,
 ): Promise<Response> {
   const url = new URL(`${API_BASE}${path}`);
   url.searchParams.set("locale", "en_US");
@@ -100,12 +102,13 @@ async function doRequest(
       "Battlenet-Namespace": `${namespace}-${REGION}`,
     },
     cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
 
-  if (res.status === 401) {
+  if (res.status === 401 && !retried) {
     tokenCache = null;
     const freshToken = await getAccessToken();
-    return doRequest(path, freshToken, namespace, searchParams);
+    return doRequest(path, freshToken, namespace, searchParams, true);
   }
 
   return res;

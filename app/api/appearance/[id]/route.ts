@@ -6,9 +6,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const numId = parseInt(id, 10);
+  if (isNaN(numId)) {
+    return NextResponse.json({ error: "Invalid ID" }, { status: 400 });
+  }
 
   try {
-    const res = await getGameData(`/data/wow/item-appearance/${id}`);
+    const res = await getGameData(`/data/wow/item-appearance/${numId}`);
 
     if (res.status === 404) {
       return NextResponse.json(

@@ -102,11 +102,6 @@ export interface CharacterRouteResponse {
     raceName: string;
     className: string;
     specName: string;
-    customization: {
-      total: number;
-      mapped: number;
-      unmapped: string[];
-    };
     itemCount: number;
   };
 }
@@ -123,7 +118,7 @@ export async function GET(
   let appRes: Response;
   try {
     appRes = await getGameData(
-      `/profile/wow/character/${realm}/${name}/appearance`,
+      `/profile/wow/character/${encodeURIComponent(realm)}/${encodeURIComponent(name)}/appearance`,
       { namespace: "profile" }
     );
   } catch {
@@ -162,15 +157,12 @@ export async function GET(
     hairColor: 0,
     facialStyle: 0,
   };
-  const unmappedOptions: string[] = [];
 
   for (const c of appearance.customizations ?? []) {
     const viewerProp = CUSTOMIZATION_MAP[c.option.name];
     if (viewerProp) {
       // display_order is the 0-based index the viewer uses to pick the choice
       customizationResult[viewerProp] = c.choice.display_order;
-    } else {
-      unmappedOptions.push(c.option.name);
     }
   }
 
@@ -248,13 +240,6 @@ export async function GET(
       raceName: appearance.playable_race.name,
       className: appearance.playable_class.name,
       specName: appearance.active_spec.name,
-      customization: {
-        total: appearance.customizations?.length ?? 0,
-        mapped: Object.keys(CUSTOMIZATION_MAP).filter(
-          (k) => appearance.customizations?.some((c) => c.option.name === k)
-        ).length,
-        unmapped: unmappedOptions,
-      },
       itemCount: items.length,
     },
   };

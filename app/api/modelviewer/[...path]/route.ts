@@ -17,6 +17,12 @@ export async function GET(
   { params }: { params: Promise<{ path: string[] }> }
 ) {
   const { path } = await params;
+
+  // Reject path traversal — "..", ".", or percent-encoded dot sequences
+  if (path.some(seg => seg === ".." || seg === "." || seg.toLowerCase().includes("%2e"))) {
+    return new NextResponse("Bad request", { status: 400 });
+  }
+
   const assetPath = path.join("/");
   const upstream = `${CDN_BASE}/${assetPath}`;
 
@@ -31,8 +37,12 @@ export async function GET(
       },
       // Don't cache errors
       cache: "no-store",
+      signal: AbortSignal.timeout(8_000),
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      return new NextResponse("Upstream timed out", { status: 504 });
+    }
     return new NextResponse("Upstream fetch failed", { status: 502 });
   }
 

@@ -1,35 +1,13 @@
 import "server-only";
 import { NextRequest, NextResponse } from "next/server";
-import { readFileSync } from "fs";
-import { join } from "path";
 import { getGameData } from "@/lib/blizzard";
+import { getSourceIndex } from "@/lib/sourceIndex";
 import {
   SLOT_TO_INVENTORY_TYPES,
   INVENTORY_TYPE_TO_VIEWER_SLOT,
   ARMOR_FILTERABLE_SLOTS,
   CLASS_TO_ARMOR_SUBCLASS,
 } from "@/lib/slots";
-
-// ── Source index ──────────────────────────────────────────────────────────────
-
-type SourceEntry = {
-  instanceId: number;
-  instanceName: string;
-  encounterId: number;
-  encounterName: string;
-  type: "raid" | "dungeon";
-};
-type SourceIndex = Record<string, { sources: SourceEntry[] }>;
-
-let _sourceIndex: SourceIndex | null = null;
-function getSourceIndex(): SourceIndex {
-  if (!_sourceIndex) {
-    _sourceIndex = JSON.parse(
-      readFileSync(join(process.cwd(), "data", "source-index.json"), "utf-8")
-    ) as SourceIndex;
-  }
-  return _sourceIndex;
-}
 
 // ── Concurrency helper ────────────────────────────────────────────────────────
 
@@ -89,8 +67,8 @@ const PAGE_SIZE = 24;
 export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const slot      = parseInt(searchParams.get("slot") ?? "", 10);
-  const q         = searchParams.get("q")?.trim() ?? "";
-  const page      = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
+  const q         = (searchParams.get("q")?.trim() ?? "").slice(0, 100);
+  const page      = Math.min(500, Math.max(1, parseInt(searchParams.get("page") ?? "1", 10)));
   const typeParam = searchParams.get("type") ?? "";
   const className = searchParams.get("className")?.trim() ?? "";
 

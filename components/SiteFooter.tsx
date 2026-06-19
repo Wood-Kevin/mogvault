@@ -1,9 +1,4 @@
 // Server component — no interactivity needed.
-//
-// Blizzard disclaimer uses the standard Fan Content Policy attribution template.
-// Verify the exact current wording against:
-//   https://www.blizzard.com/en-us/legal/ → Fan Content Policy
-// before public launch if the policy has been updated.
 
 export default function SiteFooter() {
   return (
@@ -37,7 +32,7 @@ export default function SiteFooter() {
         <p className="text-xs text-muted leading-relaxed max-w-3xl">
           MogVault is unofficial Fan Content permitted under the{" "}
           <a
-            href="https://www.blizzard.com/en-us/legal/a2989b50-54b6-4a1b-882c-814d4cf73dba/blizzard-fan-content-policy"
+            href="https://www.blizzard.com/en-us/legal/"
             target="_blank"
             rel="noopener noreferrer"
             className="underline underline-offset-2 transition-colors hover:text-lavender"
