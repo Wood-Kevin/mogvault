@@ -10,7 +10,7 @@ function ViewerSkeleton() {
         <div className="h-9 w-44 rounded-lg bg-surface animate-pulse" />
         <div className="h-9 w-32 rounded-lg bg-surface animate-pulse" />
       </div>
-      <div className="h-[560px] rounded-xl border border-edge bg-void-alt" />
+      <div className="h-[620px] rounded-xl border border-edge bg-void-alt" />
     </div>
   );
 }

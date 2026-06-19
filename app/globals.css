@@ -14,7 +14,6 @@
 }
 
 /* ── Tailwind v4 design tokens ──────────────────────────────────── */
-/* @theme inline references our :root vars directly (no indirection). */
 @theme inline {
   --color-void:          var(--bg);
   --color-void-alt:      var(--bg-alt);
@@ -26,7 +25,6 @@
   --color-muted:         var(--text-muted);
   --color-edge:          var(--border);
 
-  /* shadow-glow → used as hover:shadow-glow on interactive elements */
   --shadow-glow: 0 0 0 1px rgb(139 92 246 / 0.3),
                  0 0 16px 4px rgb(139 92 246 / 0.25),
                  0 0 36px 10px rgb(139 92 246 / 0.12);
@@ -42,18 +40,42 @@ html {
 
 body {
   background: var(--bg);
+  /* Subtle atmospheric glow bleeding from the top of every page */
+  background-image: radial-gradient(
+    ellipse 110% 480px at 50% 0px,
+    rgb(45 18 87 / 0.38) 0%,
+    transparent 100%
+  );
   color: var(--text);
   font-family: var(--font-sans, Arial, Helvetica, sans-serif);
   -webkit-font-smoothing: antialiased;
+}
+
+/* ── Shared component styles ────────────────────────────────────── */
+@layer components {
+  /* Reusable card surface — border + soft shadow, no hover */
+  .card-surface {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+  }
+
+  /* Accent card — used for selected / focused states */
+  .card-accent {
+    background: rgb(139 92 246 / 0.08);
+    border: 1px solid var(--accent);
+    border-radius: 0.75rem;
+    box-shadow: var(--shadow-glow);
+  }
 }
 
 /* ── Print ──────────────────────────────────────────────────────── */
 @media print {
   html, body {
     background: white !important;
+    background-image: none !important;
     color: black !important;
   }
-  /* Page-break safety for instance/encounter cards */
   .print-card {
     page-break-inside: avoid;
   }

@@ -13,8 +13,6 @@ import RealmCombobox from "./RealmCombobox";
 
 const JQUERY_URL   = "https://code.jquery.com/jquery-3.7.1.min.js";
 const VIEWER_URL   = "https://wow.zamimg.com/modelviewer/live/viewer/viewer.min.js";
-// CORS: wow.zamimg.com returns 403 for cross-origin fetch() from non-Wowhead origins.
-// All model asset fetches route through our proxy (same-origin from the browser).
 const CONTENT_PATH = "/api/modelviewer/live/";
 const CONTAINER_ID = "mv-character-container";
 
@@ -36,15 +34,11 @@ export interface CharacterViewerProps {
   onModelReady?: (model: ViewerModel) => void;
 }
 
-// Discriminated union: three states per slot.
-//   "item"   — user applied a transmog override
-//   "hidden" — user chose to show the slot empty (bare model)
-//   absent   — character's original equipped appearance (no override stored)
 export type OutfitEntry =
   | { kind: "item"; itemId: number; displayId: number; appearanceId: number | null; name: string; icon: string | null }
   | { kind: "hidden" };
 
-export type Outfit = Record<number, OutfitEntry>; // keyed by viewer slot
+export type Outfit = Record<number, OutfitEntry>;
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
 
@@ -79,32 +73,99 @@ function loadScript(src: string, id: string): Promise<void> {
   });
 }
 
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function Overlay({ children, dim = false }: { children: React.ReactNode; dim?: boolean }) {
+  return (
+    <div
+      className={
+        "absolute inset-0 flex items-center justify-center" +
+        (dim ? " bg-void/70 backdrop-blur-sm" : "")
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
+function LoadingRing({ label }: { label: string }) {
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div className="h-6 w-6 rounded-full border-2 border-edge border-t-accent-bright animate-spin" />
+      <p className="text-xs text-muted">{label}</p>
+    </div>
+  );
+}
+
+// ── Feature cards (landing entrance) ─────────────────────────────────────────
+
+function FeatureCard({
+  icon,
+  title,
+  desc,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <div className="flex flex-col gap-3 rounded-xl border border-edge bg-surface/60 p-4 backdrop-blur-sm">
+      <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-accent/25 bg-accent/10 text-accent-bright flex-shrink-0">
+        {icon}
+      </div>
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-lavender">{title}</p>
+        <p className="text-xs text-muted leading-relaxed">{desc}</p>
+      </div>
+    </div>
+  );
+}
+
+// Inline SVG icons — 18×18, currentColor
+const CharacterIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+    <circle cx="9" cy="5.5" r="2.5" />
+    <path d="M2.5 16c0-3.31 2.91-6 6.5-6s6.5 2.69 6.5 6" />
+  </svg>
+);
+
+const OutfitIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="2" width="6" height="6" rx="1" />
+    <rect x="10" y="2" width="6" height="6" rx="1" />
+    <rect x="2" y="10" width="6" height="6" rx="1" />
+    <rect x="10" y="10" width="6" height="6" rx="1" />
+  </svg>
+);
+
+const FarmIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 5l1.5 1.5L7.5 3" />
+    <path d="M10 5h5M10 9.5h5M10 14h3" />
+    <circle cx="4.5" cy="9.5" r="1" fill="currentColor" stroke="none" />
+    <circle cx="4.5" cy="14" r="1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CharacterViewer({ onModelReady }: CharacterViewerProps) {
-  const [realmSlug, setRealmSlug] = useState("zuljin"); // canonical slug from combobox
+  const [realmSlug, setRealmSlug] = useState("zuljin");
   const [charName,  setCharName]  = useState("demonkaz");
   const [phase,     setPhase]     = useState<Phase>("loading-deps");
   const [errorMsg,  setErrorMsg]  = useState<string | null>(null);
   const [meta,      setMeta]      = useState<CharacterRouteResponse["meta"] | null>(null);
 
-  // Outfit state — keyed by viewer slot
-  const [charKey,              setCharKey]              = useState<string | null>(null);
-  const [outfit,               setOutfit]               = useState<Outfit>({});
-  // Flat set of Blizzard appearance IDs the character already owns in their transmog collection.
-  // null = not yet fetched or fetch failed (degrade gracefully — no badges shown).
-  const [ownedAppearanceIds,   setOwnedAppearanceIds]   = useState<Set<number> | null>(null);
+  const [charKey,            setCharKey]            = useState<string | null>(null);
+  const [outfit,             setOutfit]             = useState<Outfit>({});
+  const [ownedAppearanceIds, setOwnedAppearanceIds] = useState<Set<number> | null>(null);
 
   const generateModelsRef = useRef<
     ((aspect: number, selector: string, character: object) => Promise<ViewerModel>) | null
   >(null);
   const modelRef     = useRef<ViewerModel | null>(null);
-  // Base items from the character API: viewer slot → displayId of the character's
-  // original equipped appearance. Stored in a ref so revertSlot can read it
-  // without triggering re-renders or stale-closure issues.
   const baseItemsRef = useRef<Record<number, number>>({});
-  // Measured before generateModels so canvas dimensions match the visible area.
-  const stageRef = useRef<HTMLDivElement>(null);
+  const stageRef     = useRef<HTMLDivElement>(null);
 
   // ── Bootstrap scripts ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -170,13 +231,10 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       const container = document.getElementById(CONTAINER_ID);
       if (container) container.innerHTML = "";
 
-      // Aspect = stage px width / px height so the canvas matches the visible area.
       const stageW = stageRef.current?.clientWidth  ?? 800;
       const stageH = stageRef.current?.clientHeight ?? 620;
       const aspect = stageW / stageH;
 
-      // Remap weapon logical slots (16/17) to viewer render slots (21/22) before
-      // passing to generateModels. Outfit state and localStorage stay on logical slots.
       const viewerCharacter = {
         ...charData.character,
         items: charData.character.items.map(
@@ -187,14 +245,12 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       modelRef.current = model;
       onModelReady?.(model);
 
-      // Store the character's original items so revert can restore them.
       const newBaseItems: Record<number, number> = {};
       for (const [slot, displayId] of charData.character.items) {
         newBaseItems[slot] = displayId;
       }
       baseItemsRef.current = newBaseItems;
 
-      // Re-apply any saved outfit overrides for this character.
       const key   = `${realmSlug}/${nameSlug}`;
       const saved = loadSavedOutfit(key);
       for (const [slotStr, entry] of Object.entries(saved)) {
@@ -211,7 +267,6 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       setMeta(charData.meta);
       setPhase("loaded");
 
-      // Fetch transmog collection in the background — degrade silently on failure.
       fetch(
         `/api/character/${encodeURIComponent(realmSlug)}/${encodeURIComponent(nameSlug)}/collections`
       )
@@ -247,9 +302,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
     });
   }, [charKey]);
 
-  // ── Hide a slot (bare model) ───────────────────────────────────────────────
-  // Passes displayId=0 to updateItemViewer, which clears the current item;
-  // the viewer's attempt to load display 0 fails gracefully and leaves the slot empty.
+  // ── Hide a slot ────────────────────────────────────────────────────────────
   const hideSlot = useCallback((slot: number) => {
     if (!modelRef.current || !charKey) return;
     modelRef.current.updateItemViewer(toRenderSlot(slot), 0);
@@ -261,7 +314,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
     });
   }, [charKey]);
 
-  // ── Revert a slot to base (or to empty if character had nothing there) ─────
+  // ── Revert a slot ─────────────────────────────────────────────────────────
   const revertSlot = useCallback((slot: number) => {
     if (!modelRef.current || !charKey) return;
     const baseDisplayId = baseItemsRef.current[slot] ?? 0;
@@ -284,7 +337,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       {/* Character input form */}
       <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 print:hidden">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="mv-realm" className="text-xs uppercase tracking-widest text-muted">
+          <label htmlFor="mv-realm" className="text-[10px] font-semibold uppercase tracking-widest text-muted">
             Realm
           </label>
           <RealmCombobox
@@ -294,7 +347,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="mv-name" className="text-xs uppercase tracking-widest text-muted">
+          <label htmlFor="mv-name" className="text-[10px] font-semibold uppercase tracking-widest text-muted">
             Character
           </label>
           <input
@@ -302,7 +355,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
             type="text"
             value={charName}
             onChange={e => setCharName(e.target.value)}
-            placeholder="demonkaz"
+            placeholder="Character name"
             disabled={isBusy}
             className="w-44 rounded-lg border border-edge bg-void px-3 py-2 text-sm text-lavender placeholder:text-muted focus:border-accent focus:outline-none disabled:opacity-50 transition-colors"
           />
@@ -310,48 +363,91 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
         <button
           type="submit"
           disabled={isBusy}
-          className="rounded-lg border border-accent px-5 py-2 text-sm font-semibold text-accent-bright transition-shadow duration-300 hover:shadow-glow disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-lg border border-accent px-6 py-2 text-sm font-semibold text-accent-bright hover:shadow-glow disabled:cursor-not-allowed disabled:opacity-40 transition-all duration-300"
         >
           {phase === "loading-deps" ? "Initialising…" :
            phase === "fetching"     ? "Fetching…"     :
            phase === "rendering"    ? "Rendering…"    :
            "Load Character"}
         </button>
-        {phase === "loading-deps" && (
-          <span className="self-end pb-2 text-xs text-muted">Loading viewer scripts…</span>
-        )}
       </form>
 
       {/* Viewer stage */}
       <div
         ref={stageRef}
-        className="relative overflow-hidden rounded-xl border border-edge bg-void-alt print:hidden"
-        style={{ height: 620 }}
+        className="relative overflow-hidden rounded-xl border border-edge print:hidden"
+        style={{
+          height: 620,
+          // Atmospheric upward glow — lit stage, dark surround
+          background: "radial-gradient(ellipse 75% 55% at 50% 100%, #1e0f35 0%, #0d0010 65%)",
+        }}
       >
         <div id={CONTAINER_ID} className="h-full w-full" />
 
-        {(phase === "loading-deps" || phase === "ready") && (
+        {/* Subtle platform glow — visual anchor for the character */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 h-px w-80 opacity-0 transition-opacity duration-700"
+          style={{
+            opacity: phase === "loaded" ? 1 : 0,
+            boxShadow: "0 0 70px 18px rgb(139 92 246 / 0.18)",
+          }}
+        />
+
+        {/* Loading deps: quiet ring */}
+        {phase === "loading-deps" && (
           <Overlay>
-            {phase === "loading-deps"
-              ? <PulseText>Initialising viewer…</PulseText>
-              : <p className="text-sm text-muted">Enter a character name and realm above.</p>}
+            <LoadingRing label="Initialising viewer…" />
           </Overlay>
         )}
-        {phase === "fetching" && (
-          <Overlay dim><PulseText>Fetching character data…</PulseText></Overlay>
+
+        {/* Ready: entrance — feature cards */}
+        {phase === "ready" && (
+          <Overlay>
+            <div className="flex w-full max-w-2xl flex-col items-center gap-8 px-8">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+                Enter a realm and character name above to begin
+              </p>
+              <div className="grid w-full grid-cols-3 gap-4">
+                <FeatureCard
+                  icon={<CharacterIcon />}
+                  title="Your real character"
+                  desc="Your actual model — race, class, and customizations — loaded live from your profile."
+                />
+                <FeatureCard
+                  icon={<OutfitIcon />}
+                  title="Build your outfit"
+                  desc="Browse by slot and preview any transmog piece on your character in real time."
+                />
+                <FeatureCard
+                  icon={<FarmIcon />}
+                  title="Farm the list"
+                  desc="A focused checklist of exactly where each piece drops, grouped by instance."
+                />
+              </div>
+            </div>
+          </Overlay>
         )}
-        {phase === "rendering" && (
-          <Overlay dim><PulseText>Rendering 3D model…</PulseText></Overlay>
+
+        {/* Fetching / rendering: dimmed overlay with spinner */}
+        {(phase === "fetching" || phase === "rendering") && (
+          <Overlay dim>
+            <LoadingRing
+              label={phase === "fetching" ? "Fetching character data…" : "Rendering 3D model…"}
+            />
+          </Overlay>
         )}
+
+        {/* Error */}
         {phase === "error" && (
           <Overlay>
             <div className="flex flex-col items-center gap-4 px-8 text-center">
-              <span className="text-sm font-medium text-accent-bright">
+              <p className="text-sm font-medium text-accent-bright">
                 {errorMsg ?? "Something went wrong."}
-              </span>
+              </p>
               <button
                 onClick={() => setPhase("ready")}
-                className="rounded-lg border border-edge px-4 py-1.5 text-xs text-muted hover:border-accent hover:text-accent-bright transition-colors"
+                className="rounded-lg border border-edge px-4 py-1.5 text-xs text-muted hover:border-accent/50 hover:text-lavender transition-colors"
               >
                 Dismiss
               </button>
@@ -359,24 +455,29 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
           </Overlay>
         )}
 
+        {/* Character meta — bottom-left pill */}
         {meta && phase === "loaded" && (
-          <div className="absolute bottom-3 left-3 rounded-lg border border-edge bg-void/75 px-3 py-1.5 text-xs text-muted backdrop-blur-sm">
-            {meta.name} &middot; {meta.realmName} &middot; {meta.raceName} {meta.specName} {meta.className}
+          <div className="absolute bottom-3 left-3 rounded-lg border border-edge/60 bg-void/80 px-3 py-1.5 text-xs text-muted backdrop-blur-sm">
+            <span className="text-lavender font-medium">{meta.name}</span>
+            <span className="mx-1.5 text-edge">·</span>
+            {meta.realmName}
+            <span className="mx-1.5 text-edge">·</span>
+            {meta.raceName} {meta.specName} {meta.className}
           </div>
         )}
       </div>
 
-      {/* Outfit chips — one per active override or hidden slot */}
+      {/* Outfit chips */}
       {phase === "loaded" && Object.keys(outfit).length > 0 && (
-        <div className="flex flex-wrap gap-2 print:hidden">
+        <div className="flex flex-wrap gap-1.5 print:hidden">
           {Object.entries(outfit).map(([slotStr, entry]) => {
-            const slot     = Number(slotStr);
-            const slotDef  = SLOT_DEFS.find(s => s.viewerSlot === slot);
-            const label    = slotDef?.label ?? `Slot ${slot}`;
+            const slot    = Number(slotStr);
+            const slotDef = SLOT_DEFS.find(s => s.viewerSlot === slot);
+            const label   = slotDef?.label ?? `Slot ${slot}`;
             return (
               <div
                 key={slot}
-                className="flex items-center gap-1.5 rounded-full border border-edge bg-void px-2.5 py-1 text-xs"
+                className="flex items-center gap-1.5 rounded-full border border-edge bg-surface/60 px-2.5 py-1 text-xs"
               >
                 {entry.kind === "item" && entry.icon && (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -401,21 +502,21 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
         </div>
       )}
 
-      {/* Item browser — shown after character loads */}
+      {/* Item browser */}
       {phase === "loaded" && (
         <div className="print:hidden">
-        <ItemBrowser
-          onApply={applyItem}
-          onHide={hideSlot}
-          onRevert={revertSlot}
-          outfit={outfit}
-          className={meta?.className ?? undefined}
-          ownedAppearanceIds={ownedAppearanceIds}
-        />
+          <ItemBrowser
+            onApply={applyItem}
+            onHide={hideSlot}
+            onRevert={revertSlot}
+            outfit={outfit}
+            className={meta?.className ?? undefined}
+            ownedAppearanceIds={ownedAppearanceIds}
+          />
         </div>
       )}
 
-      {/* Farming list — shown after character loads */}
+      {/* Farming list */}
       {phase === "loaded" && charKey && (
         <div className="rounded-xl border border-edge bg-surface p-4 print:border-0 print:bg-transparent print:p-0">
           <FarmingList
@@ -428,23 +529,4 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       )}
     </div>
   );
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-
-function Overlay({ children, dim = false }: { children: React.ReactNode; dim?: boolean }) {
-  return (
-    <div
-      className={
-        "absolute inset-0 flex items-center justify-center" +
-        (dim ? " bg-void-alt/80 backdrop-blur-sm" : "")
-      }
-    >
-      {children}
-    </div>
-  );
-}
-
-function PulseText({ children }: { children: React.ReactNode }) {
-  return <p className="animate-pulse text-sm text-muted">{children}</p>;
 }

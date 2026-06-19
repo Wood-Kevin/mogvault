@@ -2,20 +2,27 @@ import CharacterViewerClient from "@/components/CharacterViewerClient";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-void px-8 py-10">
-      <div className="mx-auto max-w-5xl space-y-10">
+    <main className="min-h-screen bg-void">
+      <div className="mx-auto max-w-5xl px-8 py-10 space-y-8">
 
-        {/* Header */}
-        <div className="space-y-3 print:hidden">
-          <h1 className="text-5xl font-bold tracking-wide text-lavender">MogVault</h1>
-          <p className="text-base text-muted">
-            Load your character. Build a transmog set. Get the farming list.
+        {/* Wordmark + value prop */}
+        <header className="space-y-2 print:hidden">
+          <h1
+            className="text-5xl font-bold tracking-tight text-lavender"
+            style={{
+              textShadow:
+                "0 0 28px rgb(139 92 246 / 0.6), 0 0 64px rgb(139 92 246 / 0.22)",
+            }}
+          >
+            MogVault
+          </h1>
+          <p className="text-sm text-muted tracking-wide">
+            Load your character &middot; Build a transmog set &middot; Get the farming checklist
           </p>
-        </div>
+        </header>
 
-        {/* Character viewer + item browser */}
-        <section className="space-y-3">
-          <h2 className="text-xs uppercase tracking-widest text-muted print:hidden">Character</h2>
+        {/* App — character viewer, item browser, farming list */}
+        <section>
           <CharacterViewerClient />
         </section>
 
