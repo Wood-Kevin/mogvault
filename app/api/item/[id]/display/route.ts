@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getGameData } from "@/lib/blizzard";
-import { resolveItemDisplayId } from "@/lib/resolveDisplayId";
+import { resolveItemAppearance } from "@/lib/resolveDisplayId";
 import { INVENTORY_TYPE_TO_VIEWER_SLOT } from "@/lib/slots";
 
 export interface ItemDisplayResponse {
-  itemId: number;
-  displayId: number;
-  name: string;
-  icon: string | null;
+  itemId:       number;
+  displayId:    number;
+  appearanceId: number;
+  name:         string;
+  icon:         string | null;
   inventoryType: string;
-  viewerSlot: number;
+  viewerSlot:   number;
 }
 
 export async function GET(
@@ -22,11 +23,10 @@ export async function GET(
     return NextResponse.json({ error: "Invalid item ID" }, { status: 400 });
   }
 
-  // Fetch item metadata + icon in parallel with displayId resolution
-  const [itemRes, iconRes, displayId] = await Promise.all([
+  const [itemRes, iconRes, appearance] = await Promise.all([
     getGameData(`/data/wow/item/${itemId}`),
     getGameData(`/data/wow/media/item/${itemId}`),
-    resolveItemDisplayId(itemId),
+    resolveItemAppearance(itemId),
   ]);
 
   if (itemRes.status === 404) {
@@ -38,7 +38,7 @@ export async function GET(
       { status: 502 }
     );
   }
-  if (displayId == null) {
+  if (appearance == null) {
     return NextResponse.json(
       { error: "Item has no appearance (non-visual or appearance data unavailable)" },
       { status: 404 }
@@ -50,7 +50,6 @@ export async function GET(
     inventory_type: { type: string; name: string };
   };
 
-  // Icon from media endpoint (may 404 for some items)
   let icon: string | null = null;
   if (iconRes.ok) {
     const media = await iconRes.json() as { assets?: Array<{ key: string; value: string }> };
@@ -62,7 +61,8 @@ export async function GET(
 
   const body: ItemDisplayResponse = {
     itemId,
-    displayId,
+    displayId:    appearance.displayId,
+    appearanceId: appearance.appearanceId,
     name: item.name,
     icon,
     inventoryType,

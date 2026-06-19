@@ -7,12 +7,13 @@ import type { Outfit, OutfitEntry } from "./CharacterViewer";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface FarmingListProps {
-  outfit:    Outfit;
-  charKey:   string;  // localStorage namespace for checkbox state
-  charName?: string;  // display name for copy/print header
+  outfit:              Outfit;
+  charKey:             string;         // localStorage namespace for checkbox state
+  charName?:           string;         // display name for copy/print header
+  ownedAppearanceIds?: Set<number> | null; // null = loading; undefined = unavailable
 }
 
-type ItemInfo = { name: string; icon: string | null };
+type ItemInfo = { name: string; icon: string | null; appearanceId: number | null };
 
 // ── localStorage helpers ──────────────────────────────────────────────────────
 
@@ -81,11 +82,12 @@ function TypeBadge({ type }: { type: "raid" | "dungeon" }) {
 }
 
 function ItemRow({
-  itemId, info, isChecked, onToggle, extraLocations,
+  itemId, info, isChecked, isOwned, onToggle, extraLocations,
 }: {
   itemId:         number;
   info:           ItemInfo | undefined;
   isChecked:      boolean;
+  isOwned:        boolean;
   onToggle:       (id: number) => void;
   extraLocations: number;
 }) {
@@ -93,7 +95,7 @@ function ItemRow({
     <label className={[
       "flex items-center gap-2 cursor-pointer rounded px-1 py-0.5 -mx-1",
       "transition-colors hover:bg-void-alt print:hover:bg-transparent",
-      isChecked ? "opacity-50" : "",
+      isChecked || isOwned ? "opacity-50" : "",
     ].join(" ")}>
       <input
         type="checkbox"
@@ -106,12 +108,17 @@ function ItemRow({
         <img
           src={info.icon}
           alt=""
-          className={`h-5 w-5 rounded border border-edge flex-shrink-0 print:hidden ${isChecked ? "grayscale" : ""}`}
+          className={`h-5 w-5 rounded border border-edge flex-shrink-0 print:hidden ${isChecked || isOwned ? "grayscale" : ""}`}
         />
       )}
-      <span className={`text-xs ${isChecked ? "text-muted line-through" : "text-lavender print:text-black"}`}>
+      <span className={`text-xs ${isChecked || isOwned ? "text-muted line-through" : "text-lavender print:text-black"}`}>
         {info?.name ?? `Item ${itemId}`}
       </span>
+      {isOwned && (
+        <span className="flex-shrink-0 rounded-full bg-emerald-900/40 border border-emerald-700/50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-400 print:hidden">
+          Owned
+        </span>
+      )}
       {extraLocations > 0 && (
         <span className="ml-auto text-[10px] text-muted print:text-gray-500">
           +{extraLocations} location{extraLocations !== 1 ? "s" : ""}
@@ -122,23 +129,26 @@ function ItemRow({
 }
 
 function InstanceBlock({
-  instance, farmMap, checked, onToggle, instanceCountForItem,
+  instance, farmMap, checked, ownedItemIds, onToggle, instanceCountForItem, hideOwned,
 }: {
   instance:              FarmingInstance;
   farmMap:               Map<number, ItemInfo>;
   checked:               Set<number>;
+  ownedItemIds:          Set<number>;
   onToggle:              (id: number) => void;
   instanceCountForItem:  Map<number, number>;
+  hideOwned:             boolean;
 }) {
   const allItemIds = instance.encounters.flatMap(e => e.itemIds);
-  const allObtained = allItemIds.length > 0 && allItemIds.every(id => checked.has(id));
+  const visibleIds = hideOwned ? allItemIds.filter(id => !ownedItemIds.has(id)) : allItemIds;
+  if (visibleIds.length === 0) return null;
+  const allObtained = visibleIds.every(id => checked.has(id) || ownedItemIds.has(id));
 
   return (
     <div className={[
       "rounded-xl border bg-surface print:rounded-none print:border-0 print:border-b print:border-gray-300 print:bg-transparent",
       allObtained ? "border-edge/50 opacity-60" : "border-accent/25",
     ].join(" ")}>
-      {/* Header */}
       <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-edge print:border-gray-200">
         <TypeBadge type={instance.type} />
         <span className={`font-semibold text-sm print:text-black ${allObtained ? "text-muted line-through" : "text-lavender"}`}>
@@ -148,8 +158,6 @@ function InstanceBlock({
           {instance.totalPieces} piece{instance.totalPieces !== 1 ? "s" : ""}
         </span>
       </div>
-
-      {/* Encounters */}
       <div className="divide-y divide-edge/40 print:divide-gray-200">
         {instance.encounters.map(enc => (
           <EncounterBlock
@@ -157,8 +165,10 @@ function InstanceBlock({
             encounter={enc}
             farmMap={farmMap}
             checked={checked}
+            ownedItemIds={ownedItemIds}
             onToggle={onToggle}
             instanceCountForItem={instanceCountForItem}
+            hideOwned={hideOwned}
           />
         ))}
       </div>
@@ -167,26 +177,34 @@ function InstanceBlock({
 }
 
 function EncounterBlock({
-  encounter, farmMap, checked, onToggle, instanceCountForItem,
+  encounter, farmMap, checked, ownedItemIds, onToggle, instanceCountForItem, hideOwned,
 }: {
   encounter:             FarmingEncounter;
   farmMap:               Map<number, ItemInfo>;
   checked:               Set<number>;
+  ownedItemIds:          Set<number>;
   onToggle:              (id: number) => void;
   instanceCountForItem:  Map<number, number>;
+  hideOwned:             boolean;
 }) {
+  const visibleIds = hideOwned
+    ? encounter.itemIds.filter(id => !ownedItemIds.has(id))
+    : encounter.itemIds;
+  if (visibleIds.length === 0) return null;
+
   return (
     <div className="px-4 py-2.5">
       <p className="text-[10px] font-semibold uppercase tracking-widest text-muted mb-1.5 print:text-gray-500">
         {encounter.encounterName}
       </p>
       <div className="space-y-0.5">
-        {encounter.itemIds.map(id => (
+        {visibleIds.map(id => (
           <ItemRow
             key={id}
             itemId={id}
             info={farmMap.get(id)}
             isChecked={checked.has(id)}
+            isOwned={ownedItemIds.has(id)}
             onToggle={onToggle}
             extraLocations={(instanceCountForItem.get(id) ?? 1) - 1}
           />
@@ -197,14 +215,18 @@ function EncounterBlock({
 }
 
 function OtherSourceBlock({
-  itemIds, farmMap, checked, onToggle,
+  itemIds, farmMap, checked, ownedItemIds, onToggle, hideOwned,
 }: {
-  itemIds:  number[];
-  farmMap:  Map<number, ItemInfo>;
-  checked:  Set<number>;
-  onToggle: (id: number) => void;
+  itemIds:      number[];
+  farmMap:      Map<number, ItemInfo>;
+  checked:      Set<number>;
+  ownedItemIds: Set<number>;
+  onToggle:     (id: number) => void;
+  hideOwned:    boolean;
 }) {
-  const allObtained = itemIds.length > 0 && itemIds.every(id => checked.has(id));
+  const visibleIds = hideOwned ? itemIds.filter(id => !ownedItemIds.has(id)) : itemIds;
+  if (visibleIds.length === 0) return null;
+  const allObtained = visibleIds.every(id => checked.has(id) || ownedItemIds.has(id));
 
   return (
     <div className={[
@@ -227,12 +249,13 @@ function OtherSourceBlock({
           Vendor · crafted · world drop · quest — source not in journal data
         </p>
         <div className="space-y-0.5">
-          {itemIds.map(id => (
+          {visibleIds.map(id => (
             <ItemRow
               key={id}
               itemId={id}
               info={farmMap.get(id)}
               isChecked={checked.has(id)}
+              isOwned={ownedItemIds.has(id)}
               onToggle={onToggle}
               extraLocations={0}
             />
@@ -245,24 +268,35 @@ function OtherSourceBlock({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function FarmingList({ outfit, charKey, charName }: FarmingListProps) {
-  const [data,     setData]     = useState<FarmingListResponse | null>(null);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState<string | null>(null);
-  const [checked,  setChecked]  = useState<Set<number>>(new Set());
-  const [copyDone, setCopyDone] = useState(false);
+export default function FarmingList({ outfit, charKey, charName, ownedAppearanceIds }: FarmingListProps) {
+  const [data,      setData]      = useState<FarmingListResponse | null>(null);
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
+  const [checked,   setChecked]   = useState<Set<number>>(new Set());
+  const [copyDone,  setCopyDone]  = useState(false);
+  const [hideOwned, setHideOwned] = useState(false);
 
   // Extract kind:"item" entries from outfit
   const farmableEntries: [number, ItemInfo][] = [];
   for (const entry of Object.values(outfit)) {
     if (entry.kind === "item") {
       const e = entry as Extract<OutfitEntry, { kind: "item" }>;
-      farmableEntries.push([e.itemId, { name: e.name, icon: e.icon }]);
+      farmableEntries.push([e.itemId, { name: e.name, icon: e.icon, appearanceId: e.appearanceId ?? null }]);
     }
   }
   const farmMap = new Map<number, ItemInfo>(farmableEntries);
   const farmableIds = [...farmMap.keys()].sort((a, b) => a - b);
   const farmableKey = farmableIds.join(",");
+
+  // Build the owned set: item IDs whose appearance is in the character's collection
+  const ownedItemIds = new Set<number>();
+  if (ownedAppearanceIds) {
+    for (const [itemId, info] of farmMap) {
+      if (info.appearanceId != null && ownedAppearanceIds.has(info.appearanceId)) {
+        ownedItemIds.add(itemId);
+      }
+    }
+  }
 
   // Load checkbox state
   useEffect(() => {
@@ -329,9 +363,9 @@ export default function FarmingList({ outfit, charKey, charName }: FarmingListPr
     );
   }
 
-  const obtained = checked.size > 0
-    ? [...farmMap.keys()].filter(id => checked.has(id)).length
-    : 0;
+  const manuallyObtained = [...farmMap.keys()].filter(id => checked.has(id)).length;
+  const ownedCount       = ownedItemIds.size;
+  const needToFarm       = farmableIds.filter(id => !ownedItemIds.has(id) && !checked.has(id)).length;
 
   return (
     <div className="space-y-4">
@@ -342,12 +376,28 @@ export default function FarmingList({ outfit, charKey, charName }: FarmingListPr
           <p className="text-xs uppercase tracking-widest text-muted">Farming List</p>
           {data && (
             <p className="text-[11px] text-muted mt-0.5">
-              {farmableIds.length} piece{farmableIds.length !== 1 ? "s" : ""}
-              {obtained > 0 && ` · ${obtained} obtained`}
+              {needToFarm > 0
+                ? `${needToFarm} left to farm`
+                : `${farmableIds.length} piece${farmableIds.length !== 1 ? "s" : ""}`}
+              {ownedCount > 0    && ` · ${ownedCount} owned`}
+              {manuallyObtained > 0 && ` · ${manuallyObtained} checked off`}
             </p>
           )}
         </div>
         <div className="flex gap-2">
+          {ownedCount > 0 && (
+            <button
+              onClick={() => setHideOwned(h => !h)}
+              className={[
+                "rounded border px-3 py-1.5 text-xs transition-colors",
+                hideOwned
+                  ? "border-emerald-700/60 bg-emerald-900/20 text-emerald-400"
+                  : "border-edge text-muted hover:border-emerald-700/40 hover:text-emerald-400",
+              ].join(" ")}
+            >
+              {hideOwned ? `Show owned (${ownedCount})` : `Hide owned (${ownedCount})`}
+            </button>
+          )}
           <button
             onClick={handleCopy}
             disabled={!data}
@@ -372,7 +422,7 @@ export default function FarmingList({ outfit, charKey, charName }: FarmingListPr
         </h1>
         <p className="text-sm text-gray-500 mt-1">
           {farmableIds.length} pieces to farm
-          {obtained > 0 ? ` · ${obtained} already obtained` : ""}
+          {manuallyObtained > 0 ? ` · ${manuallyObtained} checked off` : ""}
         </p>
       </div>
 
@@ -397,8 +447,10 @@ export default function FarmingList({ outfit, charKey, charName }: FarmingListPr
               instance={inst}
               farmMap={farmMap}
               checked={checked}
+              ownedItemIds={ownedItemIds}
               onToggle={toggleCheck}
               instanceCountForItem={instanceCountForItem}
+              hideOwned={hideOwned}
             />
           ))}
           {data.otherItemIds.length > 0 && (
@@ -406,7 +458,9 @@ export default function FarmingList({ outfit, charKey, charName }: FarmingListPr
               itemIds={data.otherItemIds}
               farmMap={farmMap}
               checked={checked}
+              ownedItemIds={ownedItemIds}
               onToggle={toggleCheck}
+              hideOwned={hideOwned}
             />
           )}
           {data.instances.length === 0 && data.otherItemIds.length === 0 && (

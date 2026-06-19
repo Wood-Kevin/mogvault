@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, FormEvent } from "react";
 import type { CharacterRouteResponse } from "@/app/api/character/[realm]/[name]/route";
 import type { ItemDisplayResponse } from "@/app/api/item/[id]/display/route";
+import type { CollectionsResponse } from "@/app/api/character/[realm]/[name]/collections/route";
 import { SLOT_DEFS, toRenderSlot } from "@/lib/slots";
 import ItemBrowser from "./ItemBrowser";
 import FarmingList from "./FarmingList";
@@ -40,7 +41,7 @@ export interface CharacterViewerProps {
 //   "hidden" — user chose to show the slot empty (bare model)
 //   absent   — character's original equipped appearance (no override stored)
 export type OutfitEntry =
-  | { kind: "item";   itemId: number; displayId: number; name: string; icon: string | null }
+  | { kind: "item"; itemId: number; displayId: number; appearanceId: number | null; name: string; icon: string | null }
   | { kind: "hidden" };
 
 export type Outfit = Record<number, OutfitEntry>; // keyed by viewer slot
@@ -88,8 +89,11 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
   const [meta,      setMeta]      = useState<CharacterRouteResponse["meta"] | null>(null);
 
   // Outfit state — keyed by viewer slot
-  const [charKey, setCharKey] = useState<string | null>(null);
-  const [outfit,  setOutfit]  = useState<Outfit>({});
+  const [charKey,              setCharKey]              = useState<string | null>(null);
+  const [outfit,               setOutfit]               = useState<Outfit>({});
+  // Flat set of Blizzard appearance IDs the character already owns in their transmog collection.
+  // null = not yet fetched or fetch failed (degrade gracefully — no badges shown).
+  const [ownedAppearanceIds,   setOwnedAppearanceIds]   = useState<Set<number> | null>(null);
 
   const generateModelsRef = useRef<
     ((aspect: number, selector: string, character: object) => Promise<ViewerModel>) | null
@@ -139,6 +143,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
     setMeta(null);
     setOutfit({});
     setCharKey(null);
+    setOwnedAppearanceIds(null);
     baseItemsRef.current = {};
 
     let charData: CharacterRouteResponse;
@@ -205,6 +210,16 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       setOutfit(saved);
       setMeta(charData.meta);
       setPhase("loaded");
+
+      // Fetch transmog collection in the background — degrade silently on failure.
+      fetch(
+        `/api/character/${encodeURIComponent(realmSlug)}/${encodeURIComponent(nameSlug)}/collections`
+      )
+        .then(r => r.ok ? r.json() as Promise<CollectionsResponse> : null)
+        .then(data => {
+          if (data) setOwnedAppearanceIds(new Set(data.ownedAppearanceIds));
+        })
+        .catch(() => { /* non-fatal */ });
     } catch (err) {
       setErrorMsg(
         err instanceof Error ? err.message : "Model generation failed — check browser console."
@@ -218,11 +233,12 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
     if (!modelRef.current || !charKey) return;
     modelRef.current.updateItemViewer(toRenderSlot(slot), data.displayId);
     const entry: OutfitEntry = {
-      kind:      "item",
-      itemId:    data.itemId,
-      displayId: data.displayId,
-      name:      data.name,
-      icon:      data.icon,
+      kind:         "item",
+      itemId:       data.itemId,
+      displayId:    data.displayId,
+      appearanceId: data.appearanceId,
+      name:         data.name,
+      icon:         data.icon,
     };
     setOutfit(prev => {
       const next = { ...prev, [slot]: entry };
@@ -394,6 +410,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
           onRevert={revertSlot}
           outfit={outfit}
           className={meta?.className ?? undefined}
+          ownedAppearanceIds={ownedAppearanceIds}
         />
         </div>
       )}
@@ -405,6 +422,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
             outfit={outfit}
             charKey={charKey}
             charName={meta?.name}
+            ownedAppearanceIds={ownedAppearanceIds}
           />
         </div>
       )}

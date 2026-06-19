@@ -19,7 +19,8 @@ export interface ItemBrowserProps {
   onHide:    (slot: number) => void;
   onRevert:  (slot: number) => void;
   outfit:    Record<number, OutfitEntry>;
-  className?: string; // Blizzard class name e.g. "Demon Hunter"; undefined = no filter
+  className?: string;           // Blizzard class name e.g. "Demon Hunter"; undefined = no filter
+  ownedAppearanceIds?: Set<number> | null; // null = not yet loaded; undefined = feature off
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -67,12 +68,14 @@ function ItemCard({
   item,
   isSelected,
   isApplying,
+  isCollected,
   onClick,
 }: {
-  item:       SearchResultItem;
-  isSelected: boolean;
-  isApplying: boolean;
-  onClick:    () => void;
+  item:        SearchResultItem;
+  isSelected:  boolean;
+  isApplying:  boolean;
+  isCollected: boolean;
+  onClick:     () => void;
 }) {
   const qualityColor = QUALITY_COLORS[item.quality] ?? "text-lavender";
 
@@ -107,7 +110,14 @@ function ItemCard({
           {item.name}
         </p>
       </div>
-      <SourceBadge source={item.source} />
+      <div className="flex items-center justify-between gap-1 min-h-[1.25rem]">
+        <SourceBadge source={item.source} />
+        {isCollected && (
+          <span className="ml-auto flex-shrink-0 rounded-full bg-emerald-900/40 border border-emerald-700/50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-400">
+            Collected
+          </span>
+        )}
+      </div>
       {isApplying && (
         <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-void/80">
           <span className="text-xs text-muted animate-pulse">Applying…</span>
@@ -119,7 +129,7 @@ function ItemCard({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ItemBrowser({ onApply, onHide, onRevert, outfit, className }: ItemBrowserProps) {
+export default function ItemBrowser({ onApply, onHide, onRevert, outfit, className, ownedAppearanceIds }: ItemBrowserProps) {
   // Fetch parameters — changed as single unit to avoid double-fetch
   const [fetchParams, setFetchParams] = useState({
     slot: FIRST_VISIBLE_SLOT,
@@ -394,6 +404,7 @@ export default function ItemBrowser({ onApply, onHide, onRevert, outfit, classNa
               item={item}
               isSelected={currentEntry?.kind === "item" && currentEntry.itemId === item.id}
               isApplying={applyingId === item.id}
+              isCollected={!!(ownedAppearanceIds && item.appearanceId != null && ownedAppearanceIds.has(item.appearanceId))}
               onClick={() => handleCardClick(item)}
             />
           ))}

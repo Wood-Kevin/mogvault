@@ -53,12 +53,13 @@ async function mapConcurrent<T, U>(
 // ── Response types ────────────────────────────────────────────────────────────
 
 export interface SearchResultItem {
-  id: number;
-  name: string;
-  quality: string;
-  icon: string | null;
+  id:           number;
+  name:         string;
+  quality:      string;
+  icon:         string | null;
+  appearanceId: number | null;
   inventoryType: string;
-  viewerSlot: number;
+  viewerSlot:   number;
   source: {
     type: "raid" | "dungeon" | "other";
     instanceName?: string;
@@ -139,13 +140,21 @@ export async function GET(req: NextRequest) {
   const items: BlizzardSearchItem[] = searchData.results?.map(r => r.data) ?? [];
   const sourceIndex = getSourceIndex();
 
-  // Fetch icons in parallel (bounded to 12 concurrent — well within rate limit)
-  const icons = await mapConcurrent(items, 12, async (item) => {
-    const res = await getGameData(`/data/wow/media/item/${item.id}`);
-    if (!res.ok) return null;
-    const media = await res.json() as { assets?: Array<{ key: string; value: string }> };
-    return media.assets?.find(a => a.key === "icon")?.value ?? null;
-  });
+  // Fetch icons and appearance IDs in parallel (12 concurrent each)
+  const [icons, appearanceIds] = await Promise.all([
+    mapConcurrent(items, 12, async (item) => {
+      const res = await getGameData(`/data/wow/media/item/${item.id}`);
+      if (!res.ok) return null;
+      const media = await res.json() as { assets?: Array<{ key: string; value: string }> };
+      return media.assets?.find(a => a.key === "icon")?.value ?? null;
+    }),
+    mapConcurrent(items, 12, async (item) => {
+      const res = await getGameData(`/data/wow/item/${item.id}`);
+      if (!res.ok) return null;
+      const data = await res.json() as { appearances?: Array<{ id: number }> };
+      return data.appearances?.[0]?.id ?? null;
+    }),
+  ]);
 
   const enriched: SearchResultItem[] = items.map((item, idx) => {
     const entry  = sourceIndex[String(item.id)];
@@ -157,6 +166,7 @@ export async function GET(req: NextRequest) {
       name:          item.name.en_US,
       quality:       item.quality.type,
       icon:          icons[idx],
+      appearanceId:  appearanceIds[idx],
       inventoryType: invType,
       viewerSlot:    INVENTORY_TYPE_TO_VIEWER_SLOT[invType] ?? slot,
       source: src
