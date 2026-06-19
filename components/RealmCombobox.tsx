@@ -7,32 +7,45 @@ interface RealmComboboxProps {
   value:    string;  // slug (canonical form sent to API)
   onChange: (slug: string) => void;
   disabled?: boolean;
+  region:   string;
 }
 
 const MAX_SUGGESTIONS = 8;
 
-export default function RealmCombobox({ value, onChange, disabled }: RealmComboboxProps) {
+export default function RealmCombobox({ value, onChange, disabled, region }: RealmComboboxProps) {
   const [inputValue,   setInputValue]   = useState(value); // display text shown in input
   const [realms,       setRealms]       = useState<RealmEntry[]>([]);
   const [isOpen,       setIsOpen]       = useState(false);
   const [activeIndex,  setActiveIndex]  = useState(-1);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef       = useRef<HTMLInputElement>(null);
+  const initialSlug    = useRef(value); // used only on mount to display name for pre-filled slug
+  const isInitialMount = useRef(true);
 
-  // Fetch realm list once on mount; replace initial slug with display name.
+  // Fetch realm list for the current region; reset the input when region changes.
   useEffect(() => {
-    fetch("/api/realms")
+    const isMount = isInitialMount.current;
+    isInitialMount.current = false;
+
+    if (!isMount) {
+      // Region changed — the current realm slug is no longer valid.
+      setInputValue("");
+      onChange("");
+    }
+
+    fetch(`/api/realms?region=${region}`)
       .then(r => (r.ok ? r.json() : null))
       .then((data: RealmEntry[] | null) => {
         if (!data) return;
         setRealms(data);
-        if (value) {
-          const match = data.find(r => r.slug === value);
+        // On initial mount only: show the display name for a pre-filled slug.
+        if (isMount && initialSlug.current) {
+          const match = data.find(r => r.slug === initialSlug.current);
           if (match) setInputValue(match.name);
         }
       })
       .catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [region, onChange]);
 
   // Filtered suggestions — substring match on name, max 8 results.
   const filtered: RealmEntry[] = inputValue.trim()

@@ -49,7 +49,21 @@ function outfitStorageKey(charKey: string) {
 function loadSavedOutfit(charKey: string): Outfit {
   try {
     const raw = localStorage.getItem(outfitStorageKey(charKey));
-    return raw ? (JSON.parse(raw) as Outfit) : {};
+    if (raw) return JSON.parse(raw) as Outfit;
+
+    // One-time migration: if this is a US charKey (us/realm/name), check the
+    // pre-multi-region key (realm/name) and migrate it forward.
+    if (charKey.startsWith("us/")) {
+      const legacyKey = charKey.slice(3); // strip "us/"
+      const legacyRaw = localStorage.getItem(outfitStorageKey(legacyKey));
+      if (legacyRaw) {
+        localStorage.setItem(outfitStorageKey(charKey), legacyRaw);
+        localStorage.removeItem(outfitStorageKey(legacyKey));
+        return JSON.parse(legacyRaw) as Outfit;
+      }
+    }
+
+    return {};
   } catch {
     return {};
   }
@@ -283,7 +297,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
       );
       setPhase("error");
     }
-  }, [phase, realmSlug, charName, onModelReady]);
+  }, [phase, region, realmSlug, charName, onModelReady]);
 
   // ── Apply item override ────────────────────────────────────────────────────
   const applyItem = useCallback((slot: number, data: ItemDisplayResponse) => {
@@ -362,6 +376,7 @@ export default function CharacterViewer({ onModelReady }: CharacterViewerProps) 
             value={realmSlug}
             onChange={setRealmSlug}
             disabled={isBusy}
+            region={region}
           />
         </div>
         <div className="flex flex-col gap-1.5">
